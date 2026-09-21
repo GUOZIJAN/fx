@@ -27,7 +27,10 @@
   const signedMoney = (n) => `${n >= 0 ? '+' : '-'}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const pct = (n) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
   const priceText = (pair, n) => Number.isFinite(n) ? n.toFixed(PAIRS.find(p => p.id === pair).digits) : '—';
-  const initialState = () => ({ cash: 10000, debt: 0, positions: [], history: [], pair: 'EUR/USD', mode: 'sim', leverage: 20, margin: 500 });
+  const LOAN_MAX = 200000;
+  const loanDailyRate = amount => amount <= 10000 ? .0001 : amount <= 50000 ? .0002 : amount <= 100000 ? .0003 : .0004;
+  const rateText = rate => `${(rate * 100).toFixed(2)}%`;
+  const initialState = () => ({ cash: 10000, debt: 0, loanPrincipal: 0, loanRate: 0, simLoanTicks: 0, fatherAidUsed: false, positions: [], history: [], pair: 'EUR/USD', mode: 'sim', leverage: 20, margin: 500 });
   let state = initialState();
   let savedSim = null;
   try {
@@ -40,6 +43,11 @@
   if (!PAIRS.some(p => p.id === state.pair)) state.pair = 'EUR/USD';
   state.leverage = Math.max(1, Math.min(100, Number(state.leverage) || 20));
   state.margin = Math.max(10, Number(state.margin) || 500);
+  state.debt = Math.max(0, Number(state.debt) || 0);
+  state.loanPrincipal = state.debt > 0 ? Math.max(1, Number(state.loanPrincipal) || state.debt) : 0;
+  state.loanRate = state.debt > 0 ? loanDailyRate(state.loanPrincipal) : 0;
+  state.simLoanTicks = Math.max(0, Math.min(19, Math.floor(Number(state.simLoanTicks) || 0)));
+  state.fatherAidUsed = !!state.fatherAidUsed;
   state.positions.forEach(pos => { pos.notional = Number.isFinite(pos.notional) ? pos.notional : pos.margin * pos.leverage; pos.warned = false; });
   if (state.mode === 'battle' && !BATTLES.some(item => item.id === state.battleId)) state.mode = 'sim';
   let sim = {};
@@ -56,10 +64,11 @@
   let battleRequestCounter = 0;
   let riskPaused = false;
   let riskPositionId = null;
+  let loanQuoteActive = false;
   let tutorialStep = 0;
 
   function save() {
-    try { localStorage.setItem('fx-heartbeat-save', JSON.stringify({ cash: state.cash, debt: state.debt, positions: state.positions, history: state.history.slice(0, 25), pair: state.pair, mode: state.mode, battleId: state.battleId, leverage: state.leverage, margin: state.margin, lastRealDate: state.lastRealDate, lastBattleDate: state.lastBattleDate, sim })); } catch (_) {}
+    try { localStorage.setItem('fx-heartbeat-save', JSON.stringify({ cash: state.cash, debt: state.debt, loanPrincipal: state.loanPrincipal, loanRate: state.loanRate, simLoanTicks: state.simLoanTicks, fatherAidUsed: state.fatherAidUsed, positions: state.positions, history: state.history.slice(0, 25), pair: state.pair, mode: state.mode, battleId: state.battleId, leverage: state.leverage, margin: state.margin, lastRealDate: state.lastRealDate, lastBattleDate: state.lastBattleDate, sim })); } catch (_) {}
   }
   function seedSim() {
     if (savedSim) { sim = savedSim; savedSim = null; }
@@ -99,6 +108,27 @@
     const floating = state.positions.reduce((sum, p) => sum + positionPnl(p), 0);
     return { used, floating, equity: state.cash + used + floating - state.debt };
   }
+  function accrueLoanInterest() {
+    if (state.debt <= 0) return;
+    state.debt = Math.round((state.debt + Math.round(state.debt * state.loanRate * 100) / 100) * 100) / 100;
+  }
+  function borrowLoan(amount, position = null) {
+    if (!Number.isFinite(amount) || amount < 1 || amount > LOAN_MAX || state.debt > 0) return false;
+    state.debt = amount;
+    state.loanPrincipal = amount;
+    state.loanRate = loanDailyRate(amount);
+    state.simLoanTicks = 0;
+    if (position) position.margin += amount;
+    else state.cash += amount;
+    return true;
+  }
+  function updateLoanQuote() {
+    if (!loanQuoteActive) return;
+    const amount = Number($('modalInput').value);
+    if (!Number.isFinite(amount) || amount < 1 || amount > LOAN_MAX) { $('modalDetail').textContent = `请输入 $1–${money(LOAN_MAX)}。`; return; }
+    const rate = loanDailyRate(amount);
+    $('modalDetail').textContent = `日利率 ${rateText(rate)} · 每交易日约 ${money(Math.round(amount * rate * 100) / 100)} 利息`;
+  }
   function notify(message) {
     const toast = $('toast'); toast.textContent = message; toast.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 3300);
@@ -108,6 +138,7 @@
     modalOpen = true;
     modalAction = options.action || null;
     riskPositionId = options.riskPositionId || null;
+    loanQuoteActive = !!options.loanQuote;
     $('modalIcon').textContent = options.icon || '✦';
     $('modalIcon').classList.toggle('loss', !!options.loss);
     $('modalTitle').textContent = options.title;
@@ -116,13 +147,16 @@
     $('modalInputWrap').classList.toggle('hidden', !options.input);
     $('modalInputLabel').textContent = options.input?.label || '';
     $('modalInput').value = options.input?.value ?? '';
+    $('modalInput').min = options.input?.min ?? 1;
     $('modalInput').max = options.input?.max ?? '';
+    $('modalInput').step = options.input?.step ?? 1;
     $('modalConfirm').textContent = options.confirm || '知道了';
     $('modalCancel').classList.toggle('hidden', !options.action);
     $('modalRiskActions').classList.toggle('hidden', !options.riskPositionId);
     $('addMarginBtn').disabled = !options.riskPositionId || state.cash < 1;
     $('loanMarginBtn').disabled = !options.riskPositionId || state.debt > 0;
     $('modal').classList.remove('hidden');
+    updateLoanQuote();
     if (options.input) setTimeout(() => $('modalInput').focus(), 30);
     else setTimeout(() => $('modalConfirm').focus(), 30);
   }
@@ -130,6 +164,7 @@
     const finishingRiskId = riskPositionId;
     $('modal').classList.add('hidden'); modalOpen = false; modalAction = null;
     riskPositionId = null;
+    loanQuoteActive = false;
     if (finishingRiskId) {
       riskPaused = false;
       const pos = state.positions.find(p => p.id === finishingRiskId);
@@ -160,6 +195,9 @@
     $('floating').className = a.floating >= 0 ? 'positive' : 'negative';
     $('usedMargin').textContent = money(a.used);
     $('debt').textContent = money(state.debt);
+    $('loanInfo').textContent = state.debt > 0
+      ? `借款 ${money(state.loanPrincipal)} · 日利率 ${rateText(state.loanRate)} · 待还 ${money(state.debt)}。每交易日计息；模拟数据每 30 秒计一天。还清后可再次借入。`
+      : '最多借 $200,000。日利率按金额分级：≤$10,000 为 0.01%，≤$50,000 为 0.02%，≤$100,000 为 0.03%，以上为 0.04%。模拟数据每 30 秒计一天。';
   }
   function renderOrder() {
     $('orderPair').textContent = state.pair;
@@ -218,7 +256,7 @@
     $('playBtn').disabled = !playback || series.loading || series.cursor >= series.items.length - 1 || riskPaused;
     $('replayBtn').disabled = !playback || series.loading || !!state.positions.length || riskPaused;
     $('dataStatus').textContent = playback ? (series.loading ? '读取中…' : series.items[series.cursor] ? `历史回放 · ${series.items[series.cursor].date}` : '尚未载入数据') : '每 1.5 秒更新';
-    $('chartLegend').textContent = playback ? 'Frankfurter · 历史日度参考汇率' : '电脑生成 · 模拟 K 线';
+    $('chartLegend').textContent = playback ? 'Frankfurter · 历史日度参考汇率' : '模拟数据 · 模拟 K 线';
     $('chartDate').textContent = playback ? `${series.items.length ? series.cursor + 1 : 0} / ${series.items.length} 个交易日` : '实时模拟';
     $('chartLoading').classList.toggle('hidden', !playback || !series.loading);
   }
@@ -268,11 +306,24 @@
     state.positions.splice(index, 1);
     state.history.unshift({ pair: pos.pair, side: pos.side, pnl, liquidated, time: new Date().toLocaleDateString('zh-CN') });
     state.history = state.history.slice(0, 25);
+    const fatherAid = liquidated && !state.fatherAidUsed && account().equity < 0;
+    const paidDebt = state.debt;
+    const clearedPositions = state.positions.length;
+    if (fatherAid) {
+      state.fatherAidUsed = true;
+      state.debt = 0;
+      state.loanPrincipal = 0;
+      state.loanRate = 0;
+      state.simLoanTicks = 0;
+      state.positions = [];
+      state.cash = 5000;
+    }
     save(); render();
     openModal({ icon: liquidated ? '✕' : pnl >= 0 ? '✦' : '♡', loss: liquidated || pnl < 0,
       title: liquidated ? '哎呀，仓位爆掉了' : pnl >= 0 ? '平仓成功，漂亮！' : '已经平仓，休息一下',
       message: liquidated ? `${pos.pair} 的亏损触及保证金的 80%，系统已自动平仓。` : `${pos.pair} ${pos.side === 1 ? '做多' : '做空'}仓位已结算，盈亏计入可用余额。`,
       detail: `${liquidated ? '本次爆仓盈亏' : '本次交易盈亏'}  ${signedMoney(pnl)}` });
+    if (fatherAid) openModal({ icon: '♡', title: '父亲的援助', message: '第一次爆仓后账户净值跌破零。父亲帮你还清欠款和贷款，让你重新开始。', detail: `已还清贷款 ${money(paidDebt)}${clearedPositions ? ` · 其余 ${clearedPositions} 笔持仓已结清` : ''} · 账户恢复为 $5,000.00` });
   }
   function checkLiquidations() {
     if (riskPaused) return;
@@ -286,7 +337,7 @@
         save();
         const suggested = Math.max(1, Math.ceil(-positionPnl(pos) / .55 - pos.margin));
         openModal({ icon: '!', loss: true, riskPositionId: pos.id, title: ratio >= .8 ? '仓位已触及爆仓线' : '仓位接近爆仓线',
-          message: `${pos.pair} 已亏损保证金的 ${(ratio * 100).toFixed(1)}%。${ratio >= .8 ? '若不补足保证金，关闭提醒后会立刻爆仓。' : '你可以在这里补保证金，或借款直接补仓。'}`,
+          message: `${pos.pair} 已亏损保证金的 ${(ratio * 100).toFixed(1)}%。${ratio >= .8 ? '若不补足保证金，关闭提醒后会立刻爆仓。' : '你可以在这里补保证金，或借款直接补仓。'}借款按金额分级计息。`,
           detail: `当前浮亏 ${signedMoney(positionPnl(pos))} · 爆仓线 80%`,
           input: { label: `补仓金额（建议 ${money(suggested)}）`, value: suggested }, confirm: '暂不处理' });
         return;
@@ -298,12 +349,12 @@
   function addMarginToPosition(borrow) {
     const pos = state.positions.find(p => p.id === riskPositionId);
     const amount = Number($('modalInput').value);
-    const available = borrow ? 5000 : state.cash;
-    if (!pos || !Number.isFinite(amount) || amount < 1 || amount > available + .001) return notify(borrow ? '借款补仓金额应为 $1–$5,000。' : '补仓金额不能超过可用余额。');
+    const available = borrow ? LOAN_MAX : state.cash;
+    if (!pos || !Number.isFinite(amount) || amount < 1 || amount > available + .001) return notify(borrow ? '借款补仓金额应为 $1–$200,000。' : '补仓金额不能超过可用余额。');
     if (borrow && state.debt > 0) return notify('请先偿还当前贷款，才能再次借入。');
-    if (borrow) state.debt += amount * 1.01;
+    if (borrow) borrowLoan(amount, pos);
     else state.cash = Math.max(0, state.cash - amount);
-    pos.margin += amount;
+    if (!borrow) pos.margin += amount;
     save(); render();
     closeModal();
     notify(`${borrow ? '已借款' : '已追加'} ${money(amount)} 至 ${pos.pair} 保证金。`);
@@ -320,7 +371,10 @@
       if (series.candles.length > 150) series.candles.shift();
       series.price = close;
     });
-    if (state.mode === 'sim') { checkLiquidations(); render(); }
+    if (state.mode === 'sim') {
+      if (state.debt > 0 && ++state.simLoanTicks >= 20) { state.simLoanTicks = 0; accrueLoanInterest(); }
+      checkLiquidations(); render();
+    }
     save();
   }
   async function fetchHistory(start, end = '') {
@@ -395,13 +449,14 @@
     if (mode === 'real') { const ok = await loadReal(); if (!ok) { render(); return; } }
     state.mode = mode;
     if (mode === 'real') state.lastRealDate = real.items[real.cursor].date;
-    save(); render(); notify(mode === 'real' ? '已切换为真实历史汇率回放。' : '已切换为电脑生成行情。');
+    save(); render(); notify(mode === 'real' ? '已切换为真实历史汇率回放。' : '已切换为模拟数据行情。');
   }
   function nextDay() {
     if (riskPaused || state.mode === 'sim') return;
     const series = state.mode === 'battle' ? battle : real;
     if (series.loading || series.cursor >= series.items.length - 1) { autoPlay = false; renderChartHeader(); return; }
     series.cursor++;
+    accrueLoanInterest();
     if (state.mode === 'battle') state.lastBattleDate = series.items[series.cursor].date;
     else state.lastRealDate = series.items[series.cursor].date;
     checkLiquidations(); save(); render();
@@ -503,18 +558,19 @@
   $('historyToggle').addEventListener('click', () => { historyExpanded = !historyExpanded; renderHistory(); });
   $('borrowBtn').addEventListener('click', () => {
     if (state.debt > 0) return notify('请先偿还当前贷款，再申请新贷款。');
-    openModal({ icon: '$', title: '申请周转贷款', message: '最多可借 $5,000，借入时计入 1% 一次性费用。', detail: '借款会增加可用余额与待还贷款', input: { label: '借款金额（最多 $5,000）', value: 1000, max: 5000 }, confirm: '确认借入', action: amount => { if (!Number.isFinite(amount) || amount < 1 || amount > 5000) return notify('请输入 $1–$5,000 的借款金额。'); state.cash += amount; state.debt += amount * 1.01; save(); render(); closeModal(); notify(`已借入 ${money(amount)}。`); } });
+    openModal({ icon: '$', title: '申请周转贷款', message: '最多可借 $200,000。借得越多，日利率越高；真实数据与经典战役每推进一个交易日计息，模拟数据每 30 秒计息一次。', loanQuote: true, input: { label: '借款金额（最多 $200,000）', value: 1000, max: LOAN_MAX }, confirm: '确认借入', action: amount => { if (!borrowLoan(amount)) return notify('请输入 $1–$200,000 的借款金额。'); save(); render(); closeModal(); notify(`已借入 ${money(amount)}，日利率 ${rateText(state.loanRate)}。`); } });
   });
   $('repayBtn').addEventListener('click', () => {
     if (state.debt <= 0) return notify('现在没有待还贷款。');
-    if (state.cash < 1) return notify('可用余额不足，暂时无法还款。');
+    if (state.cash < .01) return notify('可用余额不足，暂时无法还款。');
     const max = Math.min(state.debt, state.cash);
-    openModal({ icon: '♡', title: '偿还贷款', message: `当前待还 ${money(state.debt)}，可用余额 ${money(state.cash)}。`, input: { label: '还款金额', value: Math.floor(max * 100) / 100, max }, confirm: '确认还款', action: amount => { if (!Number.isFinite(amount) || amount < 1 || amount > max + .001) return notify('还款金额超出可用范围。'); state.cash = Math.max(0, state.cash - amount); state.debt = Math.max(0, state.debt - amount); save(); render(); closeModal(); notify(`已偿还 ${money(amount)}。`); } });
+    openModal({ icon: '♡', title: '偿还贷款', message: `当前待还 ${money(state.debt)}，可用余额 ${money(state.cash)}。`, input: { label: '还款金额', value: Math.floor(max * 100) / 100, min: .01, step: .01, max }, confirm: '确认还款', action: amount => { if (!Number.isFinite(amount) || amount < .01 || amount > max + .001) return notify('还款金额超出可用范围。'); state.cash = Math.max(0, state.cash - amount); state.debt = Math.max(0, state.debt - amount); if (state.debt < .005) { state.debt = 0; state.loanPrincipal = 0; state.loanRate = 0; state.simLoanTicks = 0; } save(); render(); closeModal(); notify(`已偿还 ${money(amount)}。`); } });
   });
   $('resetBtn').addEventListener('click', () => openModal({ icon: '↺', title: '重新开始？', message: '账户余额、持仓、贷款和交易记录都会重置。', confirm: '确认重置', action: () => { state = initialState(); real = { items: [], cursor: 0, loading: false, error: '' }; battle = { items: [], cursor: 0, loading: false, error: '', id: null }; battlePickerOpen = false; autoPlay = false; riskPaused = false; modalQueue = []; requestCounter++; battleRequestCounter++; savedSim = null; sim = {}; seedSim(); save(); closeModal(); render(); notify('新的一局开始了。'); } }));
   $('addMarginBtn').addEventListener('click', () => addMarginToPosition(false));
   $('loanMarginBtn').addEventListener('click', () => addMarginToPosition(true));
   $('modalConfirm').addEventListener('click', () => { if (modalAction) modalAction(Number($('modalInput').value)); else closeModal(); });
+  $('modalInput').addEventListener('input', updateLoanQuote);
   $('modalCancel').addEventListener('click', closeModal);
   $('modalClose').addEventListener('click', closeModal);
   $('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
