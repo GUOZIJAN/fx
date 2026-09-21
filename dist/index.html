@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eff8f4">
+  <meta name="description" content="汇率心跳是一款可切换历史真实汇率与电脑生成行情的外汇交易网页游戏。">
+  <title>汇率心跳 · 外汇模拟交易</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23213b3b'/%3E%3Cpath d='M10 35h13l6-13 7 23 6-10h12' fill='none' stroke='%23b8f0d6' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">♡</span><div><strong>汇率心跳</strong><small>FX PLAYROOM</small></div></div>
+      <div class="top-center"><span class="tiny-star" aria-hidden="true">✦</span> 每一笔交易，都是一次心跳</div>
+      <div class="top-actions"><span class="session-pill"><span class="live-dot"></span> 模拟账户</span><button id="resetBtn" class="text-button" type="button">重新开始</button></div>
+    </header>
+
+    <main class="main">
+      <section class="balance-strip" aria-label="账户概览">
+        <div class="balance-lead"><div class="eyebrow">我的交易小账本 <span aria-hidden="true">✿</span></div><div class="balance-title">账户总权益 <span id="equity" class="money-large">$10,000.00</span></div><p>先观察行情，再决定要不要出手。</p></div>
+        <div class="metric"><span>可用余额</span><strong id="cash">$10,000.00</strong></div>
+        <div class="metric"><span>浮动盈亏</span><strong id="floating">$0.00</strong></div>
+        <div class="metric"><span>已用保证金</span><strong id="usedMargin">$0.00</strong></div>
+        <div class="metric"><span>待还贷款</span><strong id="debt">$0.00</strong></div>
+      </section>
+
+      <div class="workspace">
+        <aside class="panel market-panel">
+          <div class="panel-heading"><div><span class="section-kicker">MARKET WATCH</span><h2>货币对</h2></div><span class="heading-glyph" aria-hidden="true">✳</span></div>
+          <div id="pairList" class="pair-list" role="listbox" aria-label="选择货币对"></div>
+          <div class="market-note"><span aria-hidden="true">✦</span><span>价格上升时做多获利，下降时做空获利。</span></div>
+        </aside>
+
+        <section class="center-column">
+          <div class="panel chart-panel">
+            <div class="chart-topline">
+              <div><span class="section-kicker">PRICE CHART</span><div class="pair-title"><h1 id="pairTitle">EUR / USD</h1><span id="modeBadge" class="mode-badge">模拟行情</span></div><div class="pair-sub" id="pairName">欧元 / 美元</div></div>
+              <div class="quote-block"><strong id="currentPrice">1.08742</strong><span id="priceChange">+0.00%</span></div>
+            </div>
+            <div class="chart-controls"><div class="segmented" role="group" aria-label="数据模式"><button id="simMode" type="button" class="active">电脑生成</button><button id="realMode" type="button">真实数据</button></div><div class="playback-controls"><span id="dataStatus">每 1.5 秒更新</span><button id="nextDayBtn" class="outline-button hidden" type="button">下一交易日 →</button><button id="playBtn" class="outline-button hidden" type="button">自动播放</button></div></div>
+            <div class="chart-wrap"><canvas id="chart" aria-label="汇率价格走势图"></canvas><div id="chartLoading" class="chart-loading hidden">正在读取历史汇率…</div></div>
+            <div class="chart-foot"><span><i class="legend-line"></i><span id="chartLegend">模拟走势 · 仅供游戏使用</span></span><span id="chartDate">当前价格</span></div>
+          </div>
+
+          <div class="panel positions-panel"><div class="panel-heading row-heading"><div><span class="section-kicker">OPEN POSITIONS</span><h2>持仓 <span id="positionCount" class="count-pill">0</span></h2></div><span id="riskHint" class="quiet-note">暂无持仓</span></div><div id="positions" class="positions-list"></div></div>
+          <div class="panel history-panel"><div class="panel-heading row-heading"><div><span class="section-kicker">TRADE LOG</span><h2>最近结算</h2></div><button id="historyToggle" class="text-button" type="button">展开记录</button></div><div id="history" class="history-list hidden"></div></div>
+        </section>
+
+        <aside class="right-column">
+          <section class="panel order-panel"><div class="panel-heading"><div><span class="section-kicker">NEW ORDER</span><h2>开一笔交易</h2></div><span class="order-decoration" aria-hidden="true">✿</span></div><div class="order-pair"><span>交易货币对</span><strong id="orderPair">EUR / USD</strong></div><label class="field-label" for="marginInput">投入保证金 <span>USD</span></label><div class="input-shell"><span>$</span><input id="marginInput" type="number" min="10" step="10" value="500" inputmode="decimal"><button id="maxBtn" type="button">MAX</button></div><div class="range-label"><label for="leverageRange">杠杆倍数</label><strong id="leverageValue">20×</strong></div><input id="leverageRange" type="range" min="1" max="100" value="20"><div class="range-ticks"><span>1×</span><span>25×</span><span>50×</span><span>75×</span><span>100×</span></div><div class="order-preview"><div><span>名义仓位</span><strong id="notional">$10,000.00</strong></div><div><span>约可承受反向波动</span><strong id="riskPercent">4.00%</strong></div></div><div class="trade-buttons"><button id="longBtn" type="button" class="trade-button long"><span>↗</span> 做多 / 买入</button><button id="shortBtn" type="button" class="trade-button short"><span>↘</span> 做空 / 卖出</button></div><p class="order-note">按当前显示价格开仓。亏损达到保证金的 80% 时会自动爆仓。</p></section>
+          <section class="panel loan-panel"><div class="loan-head"><div><span class="section-kicker">EMERGENCY FUND</span><h2>周转小金库 <span aria-hidden="true">♡</span></h2></div></div><p>可以借钱继续交易。借款收取一次性 1% 费用，先还清才能再次借入。</p><div class="loan-actions"><button id="borrowBtn" type="button">申请贷款</button><button id="repayBtn" type="button">偿还贷款</button></div></section>
+          <div class="side-disclaimer">这是游戏，不提供真实交易。真实数据为历史日度参考汇率，不是实时交易报价。<a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">数据来源：Frankfurter ↗</a></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="modal" class="modal-backdrop hidden" role="presentation"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button id="modalClose" class="modal-x" aria-label="关闭弹窗" type="button">×</button><div id="modalIcon" class="modal-icon">✦</div><h2 id="modalTitle"></h2><p id="modalMessage"></p><div id="modalDetail" class="modal-detail"></div><div id="modalInputWrap" class="modal-input-wrap hidden"><label id="modalInputLabel" for="modalInput"></label><div class="input-shell"><span>$</span><input id="modalInput" type="number" min="1" step="1" inputmode="decimal"></div></div><div class="modal-actions"><button id="modalCancel" class="outline-button" type="button">取消</button><button id="modalConfirm" class="primary-button" type="button">知道了</button></div></div></div>
+</body>
+</html>
