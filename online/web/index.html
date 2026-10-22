@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="day" data-colors="cn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta id="themeColor" name="theme-color" content="#f2f5f2">
+  <meta name="description" content="大A 简单! 联机股票委托模拟游戏。行情由玩家与机器人委托撮合产生。">
+  <title>大A 简单! · 联机交易室</title>
+  <link rel="stylesheet" href="./styles.css?v=6">
+  <script src="https://s1.hdslb.com/bfs/seed/toy/app/sdk/toy-sdk.js"></script>
+  <script defer src="./config.js"></script>
+  <script defer src="./app.js?v=9"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="./assets/kurumi-avatar.jpg" alt="游戏头像"><div><strong>大A 简单!</strong><small>联机股票交易室</small></div></div>
+    <div class="author"><span>作者 <b>-会飞的蝈蝈-</b> · UID 443211651</span><button id="authorHomeBtn" type="button">主页 ↗</button></div>
+    <div class="header-actions"><span id="connection" class="connection offline">○ 连接中</span><button id="settingsBtn" type="button">设置</button><button id="helpBtn" type="button">新手教程</button><button id="resetBtn" type="button">重启人生 <b id="resetCount">3</b></button></div>
+  </header>
+  <div class="shell">
+    <div id="orientationHint" class="orientation-hint" hidden><span>↔ 横屏体验更佳；竖屏已将交易功能集中在首屏。</span><button id="dismissOrientation" type="button" aria-label="关闭横屏提示">×</button></div>
+    <section class="scoreboard" aria-label="账户与全服状态">
+      <div class="score-main"><span>我的账户权益</span><strong id="equity">¥10,000.00</strong><button id="nickname" type="button">股民 · 点击同步B站昵称</button></div>
+      <div class="score-stat"><span>可用余额</span><strong id="cash">¥10,000.00</strong></div>
+      <div class="score-stat"><span>浮动盈亏</span><strong id="floating">¥0.00</strong></div>
+      <div class="score-stat"><span>真人在线</span><strong id="onlineCount">0</strong></div>
+      <div class="score-stat"><span>机器人</span><strong id="botCount">14</strong></div>
+      <div class="score-stat"><span>爆仓人数</span><strong id="blowCount">0</strong></div>
+      <div class="score-stat bind-stat"><span>B站账户</span><strong id="bindStatus">连接中</strong></div>
+    </section>
+    <nav id="stockTabs" class="stock-tabs" aria-label="可交易股票"></nav>
+    <main class="board">
+      <section class="card chart-card">
+        <div class="chart-header"><div><span class="eyebrow">SIMULATED A-SHARE ORDER FLOW</span><h1 id="stockTitle">东方财富 <small>300059</small></h1></div><div class="quote"><strong id="price">¥25.00</strong><span id="change">+0.00%</span></div></div>
+        <div class="quote-line"><span>买一 <b id="bestBid">—</b></span><span>卖一 <b id="bestAsk">—</b></span><span id="marketStatus">委托撮合行情</span></div>
+        <div class="chart-controls" role="group" aria-label="K线周期"><button class="active" data-chart-frame="sec" type="button">秒</button><button data-chart-frame="hour" type="button">小时</button><button data-chart-frame="fiveHour" type="button">5小时</button><button data-chart-frame="day" type="button">天</button><span id="chartStatus">实时</span></div>
+        <div class="chart-wrap"><canvas id="chart" aria-label="股票模拟K线图"></canvas></div>
+        <div class="chart-timeline"><span id="rangeStart">—</span><input id="timeSlider" type="range" min="1" max="1" value="1" aria-label="拖动K线时间进度条"><span id="rangeEnd">—</span><button id="goLiveBtn" type="button" hidden>回到实时</button></div>
+        <div class="chart-foot"><span id="chartFootLabel">1 秒 K 线 · 成交才改变价格</span><span id="chartTime">现在</span></div>
+      </section>
+      <section class="card order-card">
+        <div class="card-head"><div><span class="eyebrow">NEW ORDER</span><h2>下委托</h2></div><span id="orderStock">东方财富 · 300059</span></div>
+        <div class="order-kind" role="group" aria-label="委托方式"><button class="active" data-order-type="market" type="button">市价</button><button data-order-type="limit" type="button">限价</button></div>
+        <div class="trade-inputs"><label>保证金 · 人民币<div class="input-wrap"><span>¥</span><input id="margin" type="number" value="500" min="20" inputmode="decimal"></div></label><label>杠杆 <strong id="leverageLabel">20×</strong><input id="leverage" type="range" min="1" max="50" value="20"></label></div>
+        <label id="limitField" class="limit-field" hidden>限价 · 元/股<div class="input-wrap"><span>¥</span><input id="limitPrice" type="number" min="0.01" step="0.01" inputmode="decimal"></div></label>
+        <div class="order-preview"><span>约 <b id="shareCount">400</b> 股</span><span>名义仓位 <b id="notional">¥10,000</b></span><span>预估手续费 <b id="fee">¥1.20</b></span></div>
+        <div class="trade-buttons"><button id="longBtn" class="buy" type="button">↗ 做多 / 买入</button><button id="shortBtn" class="sell" type="button">↘ 做空 / 卖出</button></div>
+      </section>
+      <section class="card positions-card">
+        <div class="card-head"><div><span class="eyebrow">OPEN POSITIONS</span><h2>我的持仓 <b id="positionCount">0</b></h2></div><span id="marginUsed">保证金 ¥0.00</span></div>
+        <div id="positions" class="positions"></div>
+      </section>
+      <details id="orderBookPanel" class="card secondary-card book-card" open>
+        <summary><span>委托订单 · 全部买卖盘</span><small id="bookCount">0 买 / 0 卖</small></summary>
+        <div class="book-grid"><div><h3>买盘 <span>价格 / 股数</span></h3><div id="bids" class="book-list"></div></div><div><h3>卖盘 <span>价格 / 股数</span></h3><div id="asks" class="book-list"></div></div></div>
+      </details>
+      <details id="myOrdersPanel" class="card secondary-card my-orders-card" open>
+        <summary><span>我的委托</span><small id="myOrderCount">待成交 0</small></summary>
+        <div id="myOrders" class="my-orders"></div>
+      </details>
+      <details id="rankingPanel" class="card secondary-card ranking-card" open>
+        <summary><span>全服权益榜</span><small>实时更新</small></summary>
+        <div id="leaderboard" class="leaderboard"></div>
+      </details>
+      <details id="logPanel" class="card secondary-card log-card" open>
+        <summary><span>最近结算</span><small>交易记录</small></summary>
+        <div id="tradeLog" class="trade-log"></div>
+      </details>
+    </main>
+    <footer>作者 -会飞的蝈蝈- · B站 UID 443211651<br>大A 简单! · 仅为模拟游戏，报价不是真实行情；允许做空、杠杆与随时平仓，不对应A股实盘交易规则。</footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="welcomeDialog" class="dialog"><h2>欢迎来到大A 简单!</h2><p>先熟悉交易规则，还是直接开始？</p><div class="welcome-actions"><button id="newbieBtn" type="button">我是新手 · 看教程</button><button id="veteranBtn" type="button">我是老手 · 直接玩</button></div></dialog>
+  <dialog id="settingsDialog" class="dialog"><button class="dialog-close" data-close type="button">×</button><h2>设置</h2><label class="setting-line"><span>交易音效</span><input id="soundOn" type="checkbox" checked></label><label class="setting-line"><span>音量 <b id="volumeLabel">70%</b></span><input id="volume" type="range" min="0" max="100" value="70"></label><div class="setting-line"><span>外观</span><div class="seg-buttons"><button data-theme="day" type="button">亮色</button><button data-theme="night" type="button">暗色</button></div></div><div class="setting-line"><span>涨跌颜色</span><div class="seg-buttons"><button data-colors="cn" type="button">红涨绿跌</button><button data-colors="global" type="button">绿涨红跌</button></div></div><button class="dialog-confirm" data-close type="button">完成</button></dialog>
+  <dialog id="helpDialog" class="dialog"><button class="dialog-close" data-close type="button">×</button><h2>新手教程</h2><div class="tutorial"><p><b>做多 / 做空</b>：认为股价会上涨就做多，认为会下跌就做空。本游戏允许模拟做空。</p><p><b>保证金 / 杠杆</b>：投入保证金后，杠杆放大持仓金额，也放大盈亏和手续费；亏损过大可能爆仓甚至穿仓。</p><p><b>委托</b>：下单先进入委托簿，只有与对手买卖盘撮合才成交。委托面板显示当前全部买卖盘，“我的委托”可查看或撤销未成交部分。</p><p><b>市价 / 限价</b>：市价按当前对手盘价格依次成交，可能分批或只成交一部分；限价指定可接受的价格，未成交部分留在委托簿。</p><p><b>平仓</b>：在持仓区用市价快速平仓，也可设置限价等待成交。成交价由对手委托决定。</p><p>这是 24 小时运行的模拟游戏，股票名称与代码来自A股，但价格不是交易所实时数据，也不实行实盘 T+1 规则。</p></div><button class="dialog-confirm" data-close type="button">开始交易</button></dialog>
+  <dialog id="eventDialog" class="dialog event-dialog"><div id="eventIcon" class="event-icon">✦</div><h2 id="eventTitle">交易完成</h2><p id="eventText"></p><button class="dialog-confirm" data-close type="button">继续交易</button></dialog>
+  <dialog id="resetDialog" class="dialog"><button class="dialog-close" data-close type="button" aria-label="关闭">×</button><h2>重启人生</h2><p id="resetDialogText">确定使用一次重启机会吗？当前持仓和未成交委托会清除，账户资金恢复为 ¥10,000。</p><div class="reset-actions"><button data-close type="button">先等等</button><button id="confirmResetBtn" class="dialog-confirm" type="button">确认重启</button></div></dialog>
+  <dialog id="closeLimitDialog" class="dialog"><button class="dialog-close" data-close type="button">×</button><h2>限价平仓</h2><p id="closeLimitStock"></p><label class="dialog-label">期望成交价 · 元/股<input id="closeLimitPrice" type="number" min="0.01" step="0.01" inputmode="decimal"></label><p>达到你的限价后才会与对手盘撮合；等待期间仓位仍会波动。</p><button id="submitCloseLimit" class="dialog-confirm" type="button">提交委托</button></dialog>
+  <dialog id="loginDialog" class="dialog"><h2>请先登录 B站</h2><p>联机账户会通过当前 Toy 的 B站云存档关联。请在 B站登录后重试。</p><button id="retryLogin" class="dialog-confirm" type="button">重试连接</button></dialog>
+</body>
+</html>

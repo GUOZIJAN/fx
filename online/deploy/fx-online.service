@@ -1,0 +1,21 @@
+[Unit]
+Description=FX Simple Multiplayer Game
+After=network.target
+
+[Service]
+Type=simple
+User=fxonline
+Group=fxonline
+WorkingDirectory=/opt/fx-online/server
+Environment=FX_ONLINE_DATA=/opt/fx-online/data
+ExecStart=/opt/fx-online/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8787 --workers 1
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/fx-online/data
+
+[Install]
+WantedBy=multi-user.target

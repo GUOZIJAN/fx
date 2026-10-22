@@ -1,2 +1,11 @@
 .sites-runtime/
 .site-package.tar.gz
+online/data/
+online/.venv/
+online/**/__pycache__/
+online/fx-online.zip
+online/server/tmp*/
+online/toy/
+online/toy-preview.png
+releases/
+.zcodeignore
